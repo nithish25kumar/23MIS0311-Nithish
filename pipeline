@@ -1,0 +1,65 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_IMAGE = "1nithish/html-demo:latest"
+    }
+
+    stages {
+
+        stage('Clone Code') {
+            steps {
+                git branch: 'main',
+                url: 'https://github.com/nithish25kumar/23MIS0311-Nithish.git'
+            }
+        }
+
+        stage('Docker Login') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub',
+                    usernameVariable: 'USER',
+                    passwordVariable: 'PASS'
+                )]) {
+                    bat '''
+                    echo %PASS%> pass.txt
+                    type pass.txt | docker login -u %USER% --password-stdin
+                    del pass.txt
+                    '''
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                bat "docker build -t ${env.DOCKER_IMAGE} ."
+            }
+        }
+
+        stage('Push Image') {
+            steps {
+                bat "docker push ${env.DOCKER_IMAGE}"
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                withCredentials([file(
+                    credentialsId: 'kuberconfig',
+                    variable: 'KUBECONFIG'
+                )]) {
+                    bat '''
+                    set KUBECONFIG=%KUBECONFIG%
+                    kubectl apply -f deployment.yaml --validate=false
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            bat 'docker logout'
+        }
+    }
+}
